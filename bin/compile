@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # bin/compile <build-dir> <cache-dir> <env-dir>
 
+echo "Buildpack tailored to use with Taqtile's React Template"
+
 ### Configure environment
 
 set -o errexit    # always exit on error
@@ -37,18 +39,12 @@ source $BP_DIR/lib/environment.sh
 source $BP_DIR/lib/binaries.sh
 source $BP_DIR/lib/cache.sh
 source $BP_DIR/lib/dependencies.sh
+source $BP_DIR/lib/local_packages.sh
 
 export PATH="$BUILD_DIR/.heroku/node/bin:$BUILD_DIR/.heroku/yarn/bin":$PATH
 
 LOG_FILE=$(mktemp -t node-build-log.XXXXX)
 echo "" > "$LOG_FILE"
-
-echo "<--------------------->"
-echo "BUILD_DIR: $BUILD_DIR"
-echo "CACHE_DIR: $CACHE_DIR"
-echo "ENV_DIR: $ENV_DIR"
-echo "WEB_DIR: $WEB_DIR"
-echo "YARN_CACHE_FOLDER: $YARN_CACHE_FOLDER"
 
 ### Handle errors
 
@@ -174,6 +170,17 @@ restore_cache() {
 header "Restoring cache"
 restore_cache | output "$LOG_FILE"
 
+build_local_packages() {
+  if $YARN; then
+    yarn_build_locals "$BUILD_DIR"
+  else
+    npm_build_locals "$BUILD_DIR"
+  fi
+}
+
+header "Building local packages"
+build_local_packages | output "$LOG_FILE"
+
 build_dependencies() {
   run_if_present "$WEB_DIR" 'heroku-prebuild'
 
@@ -192,7 +199,7 @@ build_dependencies() {
   mtime "modules.time.cache.$cache_status" "${start}"
 
   run_if_present "$WEB_DIR" 'heroku-postbuild'
-  run_if_present "$WEB_DIR" 'build'
+  # run_if_present "$WEB_DIR" 'build'
   log_build_scripts "$WEB_DIR"
 }
 

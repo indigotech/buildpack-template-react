@@ -103,7 +103,7 @@ yarn_node_modules() {
 
   echo "Installing node modules (yarn.lock)"
   cd "$build_dir"
-  yarn install:clean
+  yarn install
   # if yarn_supports_frozen_lockfile; then
   #   yarn install --frozen-lockfile --ignore-engines 2>&1
   # else
