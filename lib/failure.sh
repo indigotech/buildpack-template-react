@@ -164,7 +164,8 @@ fail_bin_install() {
 
 fail_node_install() {
   local log_file="$1"
-  local node_engine=$(read_json "$BUILD_DIR/package.json" ".engines.node")
+  local build_dir="${2:-}"
+  local node_engine=$(read_json "$build_dir/package.json" ".engines.node")
 
   if grep -qi 'Could not find Node version corresponding to version requirement' "$log_file"; then
     mcount "failures.invalid-node-version"
@@ -195,7 +196,8 @@ fail_node_install() {
 
 fail_yarn_install() {
   local log_file="$1"
-  local yarn_engine=$(read_json "$BUILD_DIR/package.json" ".engines.yarn")
+  local build_dir="${2:-}"
+  local yarn_engine=$(read_json "$build_dir/package.json" ".engines.yarn")
 
   if grep -qi 'Could not find Yarn version corresponding to version requirement' "$log_file"; then
     mcount "failures.invalid-yarn-version"
@@ -336,11 +338,12 @@ warn_angular_resolution() {
 
 warn_missing_devdeps() {
   local log_file="$1"
+  local build_dir=${2:-}
   if grep -qi 'cannot find module' "$log_file"; then
     warning "A module may be missing from 'dependencies' in package.json" "https://devcenter.heroku.com/articles/troubleshooting-node-deploys#ensure-you-aren-t-relying-on-untracked-dependencies"
     mcount 'warnings.modules.missing'
     if [ "$NPM_CONFIG_PRODUCTION" == "true" ]; then
-      local devDeps=$(read_json "$BUILD_DIR/package.json" ".devDependencies")
+      local devDeps=$(read_json "$build_dir/package.json" ".devDependencies")
       if [ "$devDeps" != "" ]; then
         warning "This module may be specified in 'devDependencies' instead of 'dependencies'" "https://devcenter.heroku.com/articles/nodejs-support#devdependencies"
         mcount 'warnings.modules.devdeps'
@@ -351,10 +354,11 @@ warn_missing_devdeps() {
 
 warn_no_start() {
   local log_file="$1"
-  if ! [ -e "$BUILD_DIR/Procfile" ]; then
-    local startScript=$(read_json "$BUILD_DIR/package.json" ".scripts.start")
+  local build_dir=${2:-}
+  if ! [ -e "$build_dir/Procfile" ]; then
+    local startScript=$(read_json "$build_dir/package.json" ".scripts.start")
     if [ "$startScript" == "" ]; then
-      if ! [ -e "$BUILD_DIR/server.js" ]; then
+      if ! [ -e "$build_dir/server.js" ]; then
         warn "This app may not specify any way to start a node process" "https://devcenter.heroku.com/articles/nodejs-support#default-web-process-type"
         mcount 'warnings.unstartable'
       fi

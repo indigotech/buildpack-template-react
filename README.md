@@ -1,17 +1,36 @@
-# Heroku Buildpack for Node.js
+# Taqtile Buildpack for Template React
 
-![nodejs](https://cloud.githubusercontent.com/assets/51578/13712672/efdf2a40-e792-11e5-82ef-492478cbc0dc.png)
+This was forked from the official [Heroku buildpack](http://devcenter.heroku.com/articles/buildpacks) for Node.js apps.
 
-This is the official [Heroku buildpack](http://devcenter.heroku.com/articles/buildpacks) for Node.js apps.
+## Changes made
 
-[![Build Status](https://travis-ci.org/heroku/heroku-buildpack-nodejs.svg)](https://travis-ci.org/heroku/heroku-buildpack-nodejs)
+### Detection
+
+This buildback checks if the app has a `web` folder with `package.json` inside it.
+
+### Compilation
+
+This buildpack uses `web` folder as root for `package.json`.
+
+It has a script that builds local dependencies under `packages` folder and a local dependency from `common`.
+
+The repository containing the app should have a similar structure to this:
+
+```
+- common
+  - package.json
+- packages
+  - local-dep1
+    - package.json
+  - local-dep2
+    - package.json
+  ...
+- web
+  - package.json
+- Procfile (optional)
+```
 
 ## Documentation
-
-For more information about using this Node.js buildpack on Heroku, see these Dev Center articles:
-
-- [Heroku Node.js Support](https://devcenter.heroku.com/articles/nodejs-support)
-- [Getting Started with Node.js on Heroku](https://devcenter.heroku.com/articles/nodejs)
 
 For more general information about buildpacks on Heroku:
 
@@ -25,15 +44,12 @@ buildpacks - to a specific version. That way, you can regularly update and
 test them, upgrading with confidence.
 
 First, find the version you want from
-[the list of buildpack versions](https://github.com/heroku/heroku-buildpack-nodejs/releases).
+[the list of buildpack versions](https://github.com/indigotech/buildpack-template-react/releases).
 Then, specify that version with `buildpacks:set`:
 
 ```
-heroku buildpacks:set https://github.com/heroku/heroku-buildpack-nodejs#v83 -a my-app
+heroku buildpacks:set https://github.com/indigotech/buildpack-template-react#v83 -a my-app
 ```
-
-If you have trouble upgrading to the latest version of the buildpack, please
-open a support ticket at [help.heroku.com](https://help.heroku.com/) so we can assist.
 
 ### Chain Node with multiple buildpacks
 
@@ -44,9 +60,7 @@ into the `$PATH` for easy use in subsequent buildpacks.
 
 Having trouble? Dig it? Feature request?
 
-- [help.heroku.com](https://help.heroku.com/)
-- [@jeremymorrell](http://twitter.com/jeremymorrell)
-- [GitHub issues](https://github.com/heroku/heroku-buildpack-nodejs/issues)
+- [GitHub issues](https://github.com/indigotech/buildpack-template-react/issues)
 
 ## Hacking
 

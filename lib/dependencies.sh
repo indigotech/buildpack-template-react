@@ -16,8 +16,9 @@ list_dependencies() {
 }
 
 run_if_present() {
-  local script_name=${1:-}
-  local has_script=$(read_json "$BUILD_DIR/package.json" ".scripts[\"$script_name\"]")
+  local build_dir=${1:-}
+  local script_name=${2:-}
+  local has_script=$(read_json "$build_dir/package.json" ".scripts[\"$script_name\"]")
   if [ -n "$has_script" ]; then
     if $YARN; then
       echo "Running $script_name (yarn)"
@@ -30,10 +31,11 @@ run_if_present() {
 }
 
 log_build_scripts() {
-  local build=$(read_json "$BUILD_DIR/package.json" ".scripts[\"build\"]")
-  local heroku_prebuild=$(read_json "$BUILD_DIR/package.json" ".scripts[\"heroku-prebuild\"]")
-  local heroku_postbuild=$(read_json "$BUILD_DIR/package.json" ".scripts[\"heroku-postbuild\"]")
-  local postinstall=$(read_json "$BUILD_DIR/package.json" ".scripts[\"heroku-postbuild\"]")
+  local build_dir=${1:-}
+  local build=$(read_json "$build_dir/package.json" ".scripts[\"build\"]")
+  local heroku_prebuild=$(read_json "$build_dir/package.json" ".scripts[\"heroku-prebuild\"]")
+  local heroku_postbuild=$(read_json "$build_dir/package.json" ".scripts[\"heroku-postbuild\"]")
+  local postinstall=$(read_json "$build_dir/package.json" ".scripts[\"heroku-postbuild\"]")
 
   if [ -n "$build" ]; then
     mcount "scripts.build"
@@ -101,11 +103,12 @@ yarn_node_modules() {
 
   echo "Installing node modules (yarn.lock)"
   cd "$build_dir"
-  if yarn_supports_frozen_lockfile; then
-    yarn install --frozen-lockfile --ignore-engines 2>&1
-  else
-    yarn install --pure-lockfile --ignore-engines 2>&1
-  fi
+  yarn install
+  # if yarn_supports_frozen_lockfile; then
+  #   yarn install --frozen-lockfile --ignore-engines 2>&1
+  # else
+  #   yarn install --pure-lockfile --ignore-engines 2>&1
+  # fi
 }
 
 npm_node_modules() {

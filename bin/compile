@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # bin/compile <build-dir> <cache-dir> <env-dir>
 
+echo "Buildpack tailored to use with Taqtile's React Template"
+
 ### Configure environment
 
 set -o errexit    # always exit on error
@@ -20,6 +22,8 @@ ENV_DIR=${3:-}
 BP_DIR=$(cd $(dirname ${0:-}); cd ..; pwd)
 STDLIB_FILE=$(mktemp -t stdlib.XXXXX)
 
+WEB_DIR=$BUILD_DIR/web
+
 ### Configure package manager cache directories
 [ ! "$YARN_CACHE_FOLDER" ] && YARN_CACHE_FOLDER=$(mktemp -d -t yarncache.XXXXX)
 [ ! "$NPM_CONFIG_CACHE" ] && NPM_CONFIG_CACHE=$(mktemp -d -t npmcache.XXXXX)
@@ -35,6 +39,7 @@ source $BP_DIR/lib/environment.sh
 source $BP_DIR/lib/binaries.sh
 source $BP_DIR/lib/cache.sh
 source $BP_DIR/lib/dependencies.sh
+source $BP_DIR/lib/local_packages.sh
 
 export PATH="$BUILD_DIR/.heroku/node/bin:$BUILD_DIR/.heroku/yarn/bin":$PATH
 
@@ -46,12 +51,12 @@ echo "" > "$LOG_FILE"
 handle_failure() {
   header "Build failed"
   fail_yarn_lockfile_outdated "$LOG_FILE"
-  fail_node_install "$LOG_FILE"
-  fail_yarn_install "$LOG_FILE"
+  fail_node_install "$LOG_FILE" "$WEB_DIR"
+  fail_yarn_install "$LOG_FILE" "$WEB_DIR"
   fail_invalid_semver "$LOG_FILE"
   warn_untracked_dependencies "$LOG_FILE"
   warn_angular_resolution "$LOG_FILE"
-  warn_missing_devdeps "$LOG_FILE"
+  warn_missing_devdeps "$LOG_FILE" "$WEB_DIR"
   warn_econnreset "$LOG_FILE"
   failure_message | output "$LOG_FILE"
 }
@@ -59,18 +64,18 @@ trap 'handle_failure' ERR
 
 ### Check initial state
 
-[ -e "$BUILD_DIR/node_modules" ] && PREBUILD=true || PREBUILD=false
-[ -f "$BUILD_DIR/yarn.lock" ] && YARN=true || YARN=false
-[ -f "$BUILD_DIR/package-lock.json" ] && NPM_LOCK=true || NPM_LOCK=false
+[ -e "$WEB_DIR/node_modules" ] && PREBUILD=true || PREBUILD=false
+[ -f "$WEB_DIR/yarn.lock" ] && YARN=true || YARN=false
+[ -f "$WEB_DIR/package-lock.json" ] && NPM_LOCK=true || NPM_LOCK=false
 
 ### Failures that should be caught immediately
 
 fail_dot_heroku "$BUILD_DIR"
 fail_dot_heroku_node "$BUILD_DIR"
-fail_invalid_package_json "$BUILD_DIR"
-fail_multiple_lockfiles "$BUILD_DIR"
-warn_prebuilt_modules "$BUILD_DIR"
-warn_missing_package_json "$BUILD_DIR"
+fail_invalid_package_json "$WEB_DIR"
+fail_multiple_lockfiles "$WEB_DIR"
+warn_prebuilt_modules "$WEB_DIR"
+warn_missing_package_json "$WEB_DIR"
 
 ### Compile
 
@@ -89,10 +94,10 @@ create_env # can't pipe the whole thing because piping causes subshells, prevent
 list_node_config | output "$LOG_FILE"
 
 install_bins() {
-  local node_engine=$(read_json "$BUILD_DIR/package.json" ".engines.node")
-  local iojs_engine=$(read_json "$BUILD_DIR/package.json" ".engines.iojs")
-  local npm_engine=$(read_json "$BUILD_DIR/package.json" ".engines.npm")
-  local yarn_engine=$(read_json "$BUILD_DIR/package.json" ".engines.yarn")
+  local node_engine=$(read_json "$WEB_DIR/package.json" ".engines.node")
+  local iojs_engine=$(read_json "$WEB_DIR/package.json" ".engines.iojs")
+  local npm_engine=$(read_json "$WEB_DIR/package.json" ".engines.npm")
+  local yarn_engine=$(read_json "$WEB_DIR/package.json" ".engines.yarn")
 
   if [ -n "$iojs_engine" ]; then
     echo "engines.iojs (package.json):  $iojs_engine (iojs)"
@@ -133,6 +138,7 @@ install_bins() {
   warn_old_npm
 }
 
+
 header "Installing binaries"
 install_bins | output "$LOG_FILE"
 
@@ -140,13 +146,13 @@ restore_cache() {
   local cache_status="$(get_cache_status)"
 
   if $YARN; then
-    if [ -e "$BUILD_DIR/node_modules" ]; then
+    if [ -e "$WEB_DIR/node_modules" ]; then
       warn "node_modules checked into source control" "https://blog.heroku.com/node-habits-2016#9-only-git-the-important-bits"
-      rm -rf "$BUILD_DIR/node_modules"
+      rm -rf "$WEB_DIR/node_modules"
     fi
   fi
   if [ "$cache_status" == "valid" ]; then
-    local cache_directories=$(get_cache_directories)
+    local cache_directories=$(get_cache_directories "$BUILD_DIR")
     if [ "$cache_directories" == "" ]; then
       echo "Loading 2 from cacheDirectories (default):"
       restore_cache_directories "$BUILD_DIR" "$CACHE_DIR" "$DEFAULT_CACHE"
@@ -164,26 +170,37 @@ restore_cache() {
 header "Restoring cache"
 restore_cache | output "$LOG_FILE"
 
+build_local_packages() {
+  if $YARN; then
+    yarn_build_locals "$BUILD_DIR"
+  else
+    npm_build_locals "$BUILD_DIR"
+  fi
+}
+
+header "Building local packages"
+build_local_packages | output "$LOG_FILE"
+
 build_dependencies() {
-  run_if_present 'heroku-prebuild'
+  run_if_present "$WEB_DIR" 'heroku-prebuild'
 
   local cache_status="$(get_cache_status)"
   local start=$(nowms)
 
   if $YARN; then
-    yarn_node_modules "$BUILD_DIR"
+    yarn_node_modules "$WEB_DIR"
   elif $PREBUILD; then
     echo "Prebuild detected (node_modules already exists)"
-    npm_rebuild "$BUILD_DIR"
+    npm_rebuild "$WEB_DIR"
   else
-    npm_node_modules "$BUILD_DIR"
+    npm_node_modules "$WEB_DIR"
   fi
 
   mtime "modules.time.cache.$cache_status" "${start}"
 
-  run_if_present 'heroku-postbuild'
-  # TODO: run_if_present 'build'
-  log_build_scripts
+  run_if_present "$WEB_DIR" 'heroku-postbuild'
+  # run_if_present "$WEB_DIR" 'build'
+  log_build_scripts "$WEB_DIR"
 }
 
 header "Building dependencies"
@@ -211,7 +228,7 @@ cache_build | output "$LOG_FILE"
 
 summarize_build() {
   if $NODE_VERBOSE; then
-    list_dependencies "$BUILD_DIR"
+    list_dependencies "$WEB_DIR"
   fi
 
   mmeasure 'modules.size' "$(measure_size)"
@@ -221,6 +238,6 @@ header "Build succeeded!"
 mcount "compile"
 summarize_build | output "$LOG_FILE"
 
-warn_no_start "$LOG_FILE"
+warn_no_start "$LOG_FILE" "$WEB_DIR"
 warn_unmet_dep "$LOG_FILE"
 warn_old_npm_lockfile $NPM_LOCK
