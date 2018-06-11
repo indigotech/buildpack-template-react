@@ -21,12 +21,7 @@ CACHE_DIR=${2:-}
 ENV_DIR=${3:-}
 BP_DIR=$(cd $(dirname ${0:-}); cd ..; pwd)
 STDLIB_FILE=$(mktemp -t stdlib.XXXXX)
-
 WEB_DIR=$BUILD_DIR/web
-
-### Configure package manager cache directories
-[ ! "$YARN_CACHE_FOLDER" ] && YARN_CACHE_FOLDER=$(mktemp -d -t yarncache.XXXXX)
-[ ! "$NPM_CONFIG_CACHE" ] && NPM_CONFIG_CACHE=$(mktemp -d -t npmcache.XXXXX)
 
 ### Load dependencies
 
@@ -50,10 +45,12 @@ echo "" > "$LOG_FILE"
 
 handle_failure() {
   header "Build failed"
+  fail_yarn_outdated "$LOG_FILE" "$WEB_DIR"
   fail_yarn_lockfile_outdated "$LOG_FILE"
   fail_node_install "$LOG_FILE" "$WEB_DIR"
   fail_yarn_install "$LOG_FILE" "$WEB_DIR"
   fail_invalid_semver "$LOG_FILE"
+  log_other_failures "$LOG_FILE"
   warn_untracked_dependencies "$LOG_FILE"
   warn_angular_resolution "$LOG_FILE"
   warn_missing_devdeps "$LOG_FILE" "$WEB_DIR"
@@ -92,6 +89,10 @@ mkdir -p "$BUILD_DIR/.heroku/node/"
 cd $BUILD_DIR
 create_env # can't pipe the whole thing because piping causes subshells, preventing exports
 list_node_config | output "$LOG_FILE"
+
+### Configure package manager cache directories
+[ ! "$YARN_CACHE_FOLDER" ] && export YARN_CACHE_FOLDER=$(mktemp -d -t yarncache.XXXXX)
+[ ! "$NPM_CONFIG_CACHE" ] && export NPM_CONFIG_CACHE=$(mktemp -d -t npmcache.XXXXX)
 
 install_bins() {
   local node_engine=$(read_json "$WEB_DIR/package.json" ".engines.node")
@@ -225,6 +226,17 @@ cache_build() {
 
 header "Caching build"
 cache_build | output "$LOG_FILE"
+
+prune_devdependencies() {
+  if $YARN; then
+    yarn_prune_devdependencies "$WEB_DIR"
+  else
+    npm_prune_devdependencies "$WEB_DIR"
+  fi
+}
+
+header "Pruning devDependencies"
+prune_devdependencies | output "$LOG_FILE"
 
 summarize_build() {
   if $NODE_VERBOSE; then

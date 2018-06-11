@@ -116,8 +116,26 @@ testCacheWithPrebuild() {
 
 testYarnSemver() {
   compile "yarn-semver"
-  assertCaptured "Resolving yarn version ~0.17"
-  assertCaptured "installing yarn (0.17."
+  assertCaptured "Resolving yarn version ~0.28"
+  assertCaptured "installing yarn (0.28."
+  assertCapturedSuccess
+}
+
+testOldYarn() {
+  compile "yarn-old-deprecated-version"
+  assertCaptured "Resolving yarn version ~0.16"
+  assertCaptured "installing yarn (0.16."
+  assertCaptured "error \`install\` has been replaced with \`add\`"
+  assertCaptured "Outdated Yarn version"
+  assertCaptured "Your application is specifying a requirement on an old version of Yarn"
+  assertCaptured "https://devcenter.heroku.com/articles/nodejs-support#specifying-a-yarn-version"
+  assertCapturedError
+}
+
+testYarnV1Semver() {
+  compile "yarn-v1-semver"
+  assertCaptured "Downloading and installing yarn (1."
+  assertCaptured "Installed yarn 1."
   assertCapturedSuccess
 }
 
@@ -148,7 +166,7 @@ testYarnRun() {
 
 testYarnEngine() {
   compile "yarn-engine"
-  assertCaptured "installing yarn (0.16.1)"
+  assertCaptured "installing yarn (1.4.0)"
   assertCapturedSuccess
 }
 
@@ -157,7 +175,7 @@ testYarnEngine() {
 # though we will only install using yarn if a yarn.lock exists
 testYarnOnlyEngine() {
   compile "yarn-only-engine"
-  assertCaptured "installing yarn (0.24.5)"
+  assertCaptured "installing yarn (1.4.0)"
   assertCapturedSuccess
 }
 
@@ -181,7 +199,7 @@ testErrorYarnAndNpmShrinkwrap() {
 
 testYarnLockfileOutOfDate() {
   compile "yarn-lockfile-out-of-date"
-  assertCaptured "error Your lockfile needs to be updated"
+  assertCaptured "Your lockfile needs to be updated"
   assertCaptured "Outdated Yarn lockfile"
   assertCaptured "https://kb.heroku.com/why-is-my-node-js-build-failing-because-of-an-outdated-yarn-lockfile"
   assertCapturedError
@@ -251,10 +269,6 @@ testWarnDevDeps() {
   compile "missing-devdeps-1"
   assertCaptured "A module may be missing"
   assertNotCaptured "This module may be specified"
-  assertCapturedError
-  compile "missing-devdeps-2"
-  assertCaptured "A module may be missing"
-  assertCaptured "This module may be specified"
   assertCapturedError
   compile "failing-build"
   assertNotCaptured "A module may be missing"
@@ -398,7 +412,7 @@ testConcurrencyCustomLimit() {
 # This happens on Dokku for example
 testConcurrencyTooHigh() {
   LOG_CONCURRENCY=true MEMORY_AVAILABLE=10000000000 capture $(pwd)/profile/WEB_CONCURRENCY.sh
-  assertCaptured "Could not determine a reasonable value for WEB_CONCCURENCY"
+  assertCaptured "Could not determine a reasonable value for WEB_CONCURRENCY"
   assertCaptured "Recommending WEB_CONCURRENCY=1"
   assertCapturedSuccess
 }
@@ -522,7 +536,7 @@ testSameNpm() {
 
 testNpmVersionRange() {
   compile "npm-version-range"
-  assertCaptured "Bootstrapping npm 1.4.x"
+  assertCaptured "Bootstrapping npm 5.7.x"
   assertCapturedSuccess
 }
 
@@ -562,7 +576,7 @@ testDangerousRangeStar() {
   compile "dangerous-range-star"
   assertCaptured "Dangerous semver range"
   assertCaptured "Resolving node version *"
-  assertCaptured "Downloading and installing node 9."
+  assertCaptured "Downloading and installing node 10."
   assertCapturedError
 }
 
@@ -570,14 +584,14 @@ testDangerousRangeGreaterThan() {
   compile "dangerous-range-greater-than"
   assertCaptured "Dangerous semver range"
   assertCaptured "Resolving node version >0.4"
-  assertCaptured "Downloading and installing node 9."
+  assertCaptured "Downloading and installing node 10."
   assertCapturedError
 }
 
 testRangeWithSpace() {
   compile "range-with-space"
   assertCaptured "Resolving node version >= 0.8.x"
-  assertCaptured "Downloading and installing node 9."
+  assertCaptured "Downloading and installing node 10."
   assertCapturedSuccess
 }
 
@@ -630,13 +644,6 @@ testEnvVars() {
   assertCapturedSuccess
 }
 
-testNoEnvVars() {
-  env_dir=$(mktmpdir)
-  compile "stable-node" "$(mktmpdir)" $env_dir
-  assertCaptured "NPM_CONFIG_PRODUCTION=true"
-  assertCapturedSuccess
-}
-
 testNonFileEnvVars() {
   export NPM_CONFIG_FOO=bar
   export NPM_CONFIG_PRODUCTION=false
@@ -648,17 +655,113 @@ testNonFileEnvVars() {
   unset NPM_CONFIG_PRODUCTION
 }
 
-testNoDevDependencies() {
-  compile "dev-dependencies"
+# In the following tests "lodash" is defined as a devDependency
+# testing for lodash is equivalent to testing if devDependencies 
+# were installed
+
+# Default behavior: install devDependencies then prunes them away
+testDevDependenciesInstalled() {
+  compile "dependencies"
+  assertCaptured "lodash"
+  assertCaptured "Pruning devDependencies"
+  assertCaptured "removed 1 package"
+  assertCapturedSuccess
+}
+
+# Default behavior: install devDependencies then prunes them away with Yarn
+testDevDependenciesInstalledYarn() {
+  compile "dependencies-yarn"
+  assertCaptured "lodash"
+  assertCaptured "Pruning devDependencies"
+  assertCapturedSuccess
+}
+
+# When NPM_CONFIG_PRODUCTION = false we should not prune the devDependencies
+testDevDepenenciesWithNoPruning() {
+  env_dir=$(mktmpdir)
+  echo "false" > $env_dir/NPM_CONFIG_PRODUCTION
+  compile "dependencies" "$(mktmpdir)" $env_dir
+  assertCaptured "lodash"
+  assertCaptured "Skipping because NPM_CONFIG_PRODUCTION is 'false'"
+  assertCapturedSuccess
+
+  env_dir=$(mktmpdir)
+  echo "true" > $env_dir/NPM_CONFIG_PRODUCTION
+  compile "dependencies" "$(mktmpdir)" $env_dir
+  assertNotCaptured "lodash"
+  assertCaptured "Skipping because NPM_CONFIG_PRODUCTION is 'true'"
+  assertCapturedSuccess
+}
+
+# When NPM_CONFIG_PRODUCTION = false we should not prune the devDependencies with Yarn
+testDevDepenenciesWithNoPruningYarn() {
+  env_dir=$(mktmpdir)
+  echo "false" > $env_dir/YARN_PRODUCTION
+  compile "dependencies-yarn" "$(mktmpdir)" $env_dir
+  assertCaptured "lodash"
+  assertCaptured "Skipping because YARN_PRODUCTION is 'false'"
+  assertCapturedSuccess
+
+  env_dir=$(mktmpdir)
+  echo "true" > $env_dir/YARN_PRODUCTION
+  compile "dependencies-yarn" "$(mktmpdir)" $env_dir
+  assertNotCaptured "lodash"
+  assertCaptured "Skipping because YARN_PRODUCTION is 'true'"
+  assertCapturedSuccess
+}
+
+# When NODE_ENV != production we should not prune the devDependencies
+testNodeEnvTestDepenencies() {
+  env_dir=$(mktmpdir)
+  echo "not-production" > $env_dir/NODE_ENV
+  compile "dependencies" "$(mktmpdir)" $env_dir
+  assertCaptured "lodash"
+  assertCaptured "Skipping because NODE_ENV is not 'production'"
+  assertCapturedSuccess
+}
+
+# When NODE_ENV != production we should not prune the devDependencies with Yarn
+testNodeEnvTestDepenenciesYarn() {
+  env_dir=$(mktmpdir)
+  echo "not-production" > $env_dir/NODE_ENV
+  compile "dependencies-yarn" "$(mktmpdir)" $env_dir
+  assertCaptured "lodash"
+  assertCaptured "Skipping because NODE_ENV is not 'production'"
+  assertCapturedSuccess
+}
+
+# When NPM_CONFIG_PRODUCTION = true we should not install devDependencies
+testOnlyDependenciesInstalled() {
+  env_dir=$(mktmpdir)
+  echo "true" > $env_dir/NPM_CONFIG_PRODUCTION
+  compile "dependencies" "$(mktmpdir)" $env_dir
   assertNotCaptured "lodash"
   assertCapturedSuccess
 }
 
-testDevDependencies() {
+# When NPM_CONFIG_PRODUCTION = true we should not install devDependencies with Yarn
+testOnlyDependenciesInstalledYarn() {
   env_dir=$(mktmpdir)
-  echo "false" > $env_dir/NPM_CONFIG_PRODUCTION
-  compile "dev-dependencies" "$(mktmpdir)" $env_dir
+  echo "true" > $env_dir/YARN_PRODUCTION
+  compile "dependencies-yarn" "$(mktmpdir)" $env_dir
+  assertNotCaptured "lodash"
+  assertCapturedSuccess
+}
+
+testModulesCheckedInWithDevDependencies() {
+  compile "dependencies-modules-checked-in-with-devdependencies" 
+  assertCaptured "Rebuilding any native modules"
   assertCaptured "lodash"
+  assertCaptured "removed 1 package"
+  assertCapturedSuccess
+}
+
+testModulesCheckedInWithoutDevDependencies() {
+  compile "dependencies-modules-checked-in-without-devdependencies" 
+  assertCaptured "Rebuilding any native modules"
+  assertCaptured "added 1 package"
+  assertCaptured "lodash"
+  assertCaptured "removed 1 package"
   assertCapturedSuccess
 }
 
@@ -688,10 +791,6 @@ testNoOptionalDependencies() {
 }
 
 testNpmrc() {
-  compile "dev-dependencies"
-  assertNotCaptured "lodash"
-  assertCapturedSuccess
-
   compile "dev-dependencies-npmrc"
   assertCaptured "lodash"
   assertCapturedSuccess
@@ -701,7 +800,7 @@ testShrinkwrap() {
   compile "shrinkwrap"
   assertCaptured "express@4.10.4"
   assertCaptured "lodash@2.4.0"
-  assertNotCaptured "mocha"
+  assertCaptured "mocha@2.0.1"
   assertCapturedSuccess
 }
 
@@ -724,6 +823,73 @@ testMultiExport() {
   assertCapturedSuccess
 }
 
+testCIEnvVars() {
+  compileTest "ci-env-test"
+  assertCaptured "NODE_ENV: test"
+  assertCapturedSuccess
+}
+
+testCIEnvVarsOverride() {
+  env_dir=$(mktmpdir)
+  echo "banana" > $env_dir/NODE_ENV
+
+  compileTest "ci-env-test" "$(mktmpdir)" $env_dir
+
+  assertCaptured "NODE_ENV: banana"
+  assertCapturedSuccess
+}
+
+testCIDependencies() {
+  compileTest "ci-dependencies"
+  assertCaptured "lodash"
+  assertCapturedSuccess
+}
+
+testCIDependenciesYarn() {
+  compileTest "ci-dependencies-yarn"
+  assertCaptured "lodash"
+  assertCapturedSuccess
+}
+
+testNodeEnv() {
+  compile "node-env-consistency"
+  assertCaptured "heroku-prebuild: production"
+  assertCaptured "preinstall: production"
+  assertCaptured "postinstall: production"
+  assertCaptured "heroku-postbuild: production"
+  assertCapturedSuccess
+}
+
+testNodeEnvNpmConfigProductionFalse() {
+  env_dir=$(mktmpdir)
+  echo "false" > $env_dir/NPM_CONFIG_PRODUCTION
+  compile "node-env-consistency" "$(mktmpdir)" $env_dir
+  assertCaptured "heroku-prebuild: production"
+  assertCaptured "preinstall: production"
+  assertCaptured "postinstall: production"
+  assertCaptured "heroku-postbuild: production"
+  assertCapturedSuccess
+}
+
+# Avoid this issue
+# https://github.com/npm/npm/issues/17781
+testNpmPrune53Issue() {
+  compile "npm-prune-5-3-issue"
+  assertCaptured "npm 5.3.0 installed"
+  assertCaptured "Skipping because npm 5.3.0 fails"
+  assertCaptured "https://github.com/npm/npm/issues/17781"
+  assertCapturedSuccess
+}
+
+# Avoid this issue for users with git dependencies
+# https://github.com/npm/npm/issues/19356
+testNpmPrune56Issue() {
+  compile "npm-prune-5-6-issue"
+  assertCaptured "npm 5.6.0"
+  assertCaptured "Skipping because npm 5.6.0 sometimes fails"
+  assertCaptured "https://github.com/npm/npm/issues/19356"
+  assertCapturedSuccess
+}
 
 # Utils
 
@@ -731,6 +897,7 @@ pushd $(dirname 0) >/dev/null
 popd >/dev/null
 
 source $(pwd)/test/utils
+source $(pwd)/lib/environment.sh
 
 mktmpdir() {
   dir=$(mktemp -t testXXXXX)
@@ -759,6 +926,35 @@ compile() {
   cp -a $(pwd)/* ${bp_dir}
   cp -a ${bp_dir}/test/fixtures/$1/. ${compile_dir}
   capture ${bp_dir}/bin/compile ${compile_dir} ${2:-$(mktmpdir)} $3
+}
+
+compileTest() {
+  default_process_types_cleanup
+
+  local bp_dir=$(mktmpdir)
+  local compile_dir=$(mktmpdir)
+  local cache_dir=${2:-$(mktmpdir)}
+  local env_dir=$3
+
+  cp -a $(pwd)/* ${bp_dir}
+  cp -a ${bp_dir}/test/fixtures/$1/. ${compile_dir}
+  capture ${bp_dir}/bin/test-compile ${compile_dir} ${2:-$(mktmpdir)} $3
+
+  # On Heroku, $HOME is the /app dir, so we need to set it to
+  # the compile_dir here
+  export HOME=${compile_dir}
+
+  # bin/test is not ran during build, rather during runtime, which means
+  # we need to set any environment variables set via the env_dir and run
+  # all of the .profile.d scripts
+  export_env_dir $env_dir
+  for f in ${compile_dir}/.profile.d/*; do source $f > /dev/null 2> /dev/null ; done
+
+  capture ${bp_dir}/bin/test ${compile_dir}
+
+  unset HOME
+  unset NODE_ENV
+  unset NODE_HOME
 }
 
 compileDir() {
