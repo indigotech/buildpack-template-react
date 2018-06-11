@@ -87,32 +87,38 @@ log_build_scripts() {
   fi
 }
 
-yarn_supports_frozen_lockfile() {
-  local yarn_version="$(yarn --version)"
-  # Yarn versions lower than 0.19 will crash if passed --frozen-lockfile
-  if [[ "$yarn_version" =~ ^0\.(16|17|18).*$ ]]; then
-    mcount "yarn.doesnt-support-frozen-lockfile"
-    false
-  else
-    true
-  fi
-}
-
 yarn_node_modules() {
   local build_dir=${1:-}
+  local production=${YARN_PRODUCTION:-false}
 
   echo "Installing node modules (yarn.lock)"
   cd "$build_dir"
-  yarn install
-  # if yarn_supports_frozen_lockfile; then
-  #   yarn install --frozen-lockfile --ignore-engines 2>&1
-  # else
-  #   yarn install --pure-lockfile --ignore-engines 2>&1
-  # fi
+  yarn install --production=$production --frozen-lockfile --ignore-engines 2>&1
+}
+
+yarn_prune_devdependencies() {
+  local build_dir=${1:-} 
+
+  if [ "$NODE_ENV" == "test" ]; then
+    echo "Skipping because NODE_ENV is 'test'"
+    return 0
+  elif [ "$NODE_ENV" != "production" ]; then
+    echo "Skipping because NODE_ENV is not 'production'"
+    return 0
+  elif [ -n "$YARN_PRODUCTION" ]; then
+    echo "Skipping because YARN_PRODUCTION is '$YARN_PRODUCTION'"
+    return 0
+  else 
+    local start=$(nowms)
+    cd "$build_dir" 
+    yarn install --frozen-lockfile --ignore-engines --ignore-scripts --prefer-offline 2>&1
+    mtime "prune.yarn.time" "${start}"
+  fi
 }
 
 npm_node_modules() {
   local build_dir=${1:-}
+  local production=${NPM_CONFIG_PRODUCTION:-false}
 
   if [ -e $build_dir/package.json ]; then
     cd $build_dir
@@ -124,7 +130,7 @@ npm_node_modules() {
     else
       echo "Installing node modules (package.json)"
     fi
-    npm install --unsafe-perm --userconfig $build_dir/.npmrc 2>&1
+    npm install --production=$production --unsafe-perm --userconfig $build_dir/.npmrc 2>&1
   else
     echo "Skipping (no package.json)"
   fi
@@ -132,6 +138,7 @@ npm_node_modules() {
 
 npm_rebuild() {
   local build_dir=${1:-}
+  local production=${NPM_CONFIG_PRODUCTION:-false}
 
   if [ -e $build_dir/package.json ]; then
     cd $build_dir
@@ -142,8 +149,51 @@ npm_rebuild() {
     else
       echo "Installing any new modules (package.json)"
     fi
-    npm install --unsafe-perm --userconfig $build_dir/.npmrc 2>&1
+    npm install --production=$production --unsafe-perm --userconfig $build_dir/.npmrc 2>&1
   else
     echo "Skipping (no package.json)"
+  fi
+}
+
+npm_prune_devdependencies() {
+  local build_dir=${1:-} 
+  local npm_version=$(npm --version)
+
+  if [ "$NODE_ENV" == "test" ]; then
+    echo "Skipping because NODE_ENV is 'test'"
+    return 0
+  elif [ "$NODE_ENV" != "production" ]; then
+    echo "Skipping because NODE_ENV is not 'production'"
+    return 0
+  elif [ -n "$NPM_CONFIG_PRODUCTION" ]; then
+    echo "Skipping because NPM_CONFIG_PRODUCTION is '$NPM_CONFIG_PRODUCTION'"
+    return 0
+  elif [ "$npm_version" == "5.3.0" ]; then
+    mcount "skip-prune-issue-npm-5.3.0"
+    echo "Skipping because npm 5.3.0 fails when running 'npm prune' due to a known issue"
+    echo "https://github.com/npm/npm/issues/17781"
+    echo ""
+    echo "You can silence this warning by updating to at least npm 5.7.1 in your package.json"
+    echo "https://devcenter.heroku.com/articles/nodejs-support#specifying-an-npm-version"
+    return 0
+  elif [ "$npm_version" == "5.6.0" ] ||
+       [ "$npm_version" == "5.5.1" ] ||
+       [ "$npm_version" == "5.5.0" ] ||
+       [ "$npm_version" == "5.4.2" ] ||
+       [ "$npm_version" == "5.4.1" ] ||
+       [ "$npm_version" == "5.2.0" ] ||
+       [ "$npm_version" == "5.1.0" ]; then
+    mcount "skip-prune-issue-npm-5.6.0"
+    echo "Skipping because npm $npm_version sometimes fails when running 'npm prune' due to a known issue"
+    echo "https://github.com/npm/npm/issues/19356"
+    echo ""
+    echo "You can silence this warning by updating to at least npm 5.7.1 in your package.json"
+    echo "https://devcenter.heroku.com/articles/nodejs-support#specifying-an-npm-version"
+    return 0
+  else
+    local start=$(nowms)
+    cd "$build_dir" 
+    npm prune --userconfig $build_dir/.npmrc 2>&1
+    mtime "prune.npm.time" "${start}"
   fi
 }

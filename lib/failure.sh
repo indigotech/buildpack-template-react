@@ -37,6 +37,7 @@ fail_invalid_package_json() {
 
 fail_dot_heroku() {
   if [ -f "${1:-}/.heroku" ]; then
+    mcount "failures.dot-heroku"
     header "Build failed"
     warn "The directory .heroku could not be created
 
@@ -51,6 +52,7 @@ fail_dot_heroku() {
 
 fail_dot_heroku_node() {
   if [ -f "${1:-}/.heroku/node" ]; then
+    mcount "failures.dot-heroku-node"
     header "Build failed"
     warn "The directory .heroku/node could not be created
 
@@ -116,9 +118,33 @@ fail_multiple_lockfiles() {
   fi
 }
 
+fail_yarn_outdated() {
+  local log_file="$1"
+  local build_dir="${2:-}"
+
+  local yarn_engine=$(read_json "$build_dir/package.json" ".engines.yarn")
+
+  if grep -qi 'error .install. has been replaced with .add. to add new dependencies' "$log_file"; then
+    mcount "failures.outdated-yarn"
+    echo ""
+    warn "Outdated Yarn version: $yarn_engine
+
+       Your application is specifying a requirement on an old version of Yarn ($yarn_engine)
+       which does not support the --frozen-lockfile option. Please upgrade to a
+       newer version, at least 0.19, by updating your requirement in the 'engines'
+       field in your package.json.
+
+       \"engines\": {
+         \"yarn\": \"1.3.2\"
+       }
+    " https://devcenter.heroku.com/articles/nodejs-support#specifying-a-yarn-version
+    exit 1
+  fi
+}
+
 fail_yarn_lockfile_outdated() {
   local log_file="$1"
-  if grep -qi 'error Your lockfile needs to be updated' "$log_file"; then
+  if grep -qi 'Your lockfile needs to be updated' "$log_file"; then
     mcount "failures.outdated-yarn-lockfile"
     echo ""
     warn "Outdated Yarn lockfile
@@ -204,7 +230,7 @@ fail_yarn_install() {
     echo ""
     warn "No matching version found for Yarn: $yarn_engine
 
-       Heroku supports every version of Yarn published on npm, however you have
+       Heroku supports most versions of Yarn published on npm, however you have
        specified a version in package.json ($yarn_engine) that does not correspond
        to any published version of Yarn. You can see a list of all published
        versions of Yarn with the following command:
@@ -245,6 +271,184 @@ fail_invalid_semver() {
     " https://kb.heroku.com/why-is-my-node-js-build-failing-because-of-an-invalid-semver-requirement
     exit 1
   fi
+}
+
+log_other_failures() {
+  local log_file="$1"
+  if grep -qi "sh: 1: .*: not found" "$log_file"; then
+    mcount "failures.dev-dependency-tool-not-installed"
+    return 0
+  fi
+
+  if grep -qi "Failed at the bcrypt@\d.\d.\d install script" "$log_file"; then
+    mcount "failures.bcrypt-permissions-issue"
+    return 0
+  fi
+
+  if grep -qi "Versions of @angular/compiler-cli and typescript could not be determined" "$log_file"; then
+    mcount "failures.ng-cli-version-issue"
+    return 0
+  fi
+
+  if grep -qi "Cannot read property '0' of undefined" "$log_file"; then
+    mcount "failures.npm-property-zero-issue"
+    return 0
+  fi
+
+  if grep -qi "npm is known not to run on Node.js v\d.\d.\d" "$log_file"; then
+    mcount "failures.npm-known-bad-version"
+    return 0
+  fi
+
+  # "notarget No matching version found for" = npm
+  # "error Couldn't find any versions for" = yarn
+  if grep -q -e "notarget No matching version found for" -e "error Couldn't find any versions for" "$log_file"; then
+    mcount "failures.bad-version-for-dependency"
+    return 0
+  fi
+
+  if grep -qi "You are likely using a version of node-tar or npm that is incompatible with this version of Node.js" "$log_file"; then
+    mcount "failures.node-9-npm-issue"
+    return 0
+  fi
+
+  if grep -qi "console.error(\`a bug known to break npm" "$log_file"; then
+    mcount "failures.old-node-new-npm"
+    return 0
+  fi
+
+  if grep -qi "CALL_AND_RETRY_LAST Allocation failed" "$log_file"; then
+    mcount "failures.build-out-of-memory-error"
+    return 0
+  fi
+
+  if grep -qi "enoent ENOENT: no such file or directory" "$log_file"; then
+    mcount "failures.npm-enoent"
+    return 0
+  fi
+
+  if grep -qi "ERROR in [^ ]* from UglifyJs" "$log_file"; then
+    mcount "failures.uglifyjs"
+    return 0
+  fi
+
+  # https://github.com/angular/angular-cli/issues/4551
+  if grep -qi "Module not found: Error: Can't resolve '\.\/\$\$_gendir\/app\/app\.module\.ngfactory'" "$log_file"; then
+    mcount "failures.ng-cli-issue-4551"
+    return 0
+  fi
+
+  if grep -qi "Host key verification failed" "$log_file"; then
+    mcount "failures.private-git-dependency-without-auth"
+    return 0
+  fi
+
+  # same as the next test, but isolate bcyrpt specifically
+  if grep -qi "Failed at the bcrypt@\d\.\d\.\d install" "$log_file"; then
+    mcount "failures.bcrypt-failed-to-build"
+    return 0
+  fi
+
+  if grep -qi "Failed at the [^ ]* install script" "$log_file"; then
+    mcount "failures.dependency-failed-to-build"
+    return 0
+  fi
+
+  if grep -qi "Line \d*:  '.*' is not defined" "$log_file"; then
+    mcount "failures.undefined-variable-lint"
+    return 0
+  fi
+
+  if grep -qi "npm ERR! code EBADPLATFORM" "$log_file"; then
+    mcount "failures.npm-ebadplatform"
+    return 0
+  fi
+
+  if grep -qi "npm ERR! code EINVALIDPACKAGENAME" "$log_file"; then
+    mcount "failures.npm-package-name-typo"
+    return 0
+  fi
+
+  if grep -i -e "npm ERR! code E404" -e "error An unexpected error occurred: .* Request failed \"404 Not Found\"" "$log_file"; then
+    mcount "failures.module-404"
+    return 0
+  fi
+
+  if grep -qi "sh: 1: cd: can't cd to" "$log_file"; then
+    mcount "failures.cd-command-fail"
+    return 0
+  fi
+
+  # Webpack Errors
+
+  if grep -qi "Module not found: Error: Can't resolve" "$log_file"; then
+    mcount "failures.webpack.module-not-found"
+    return 0
+  fi
+
+  if grep -qi "sass-loader/lib/loader.js:3:14" "$log_file"; then
+    mcount "failures.webpack.sass-loader-error"
+    return 0
+  fi
+
+  # Typescript errors
+
+  if grep -qi "Property '.*' does not exist on type '.*'" "$log_file"; then
+    mcount "failures.typescript.missing-property"
+    return 0
+  fi
+
+  if grep -qi "Property '.*' is private and only accessible within class '.*'" "$log_file"; then
+    mcount "failures.typescript.private-property"
+    return 0
+  fi
+
+  if grep -qi "error TS2307: Cannot find module '.*'" "$log_file"; then
+    mcount "failures.typescript.missing-module"
+    return 0
+  fi
+
+  if grep -qi "error TS2688: Cannot find type definition file for '.*'" "$log_file"; then
+    mcount "failures.typescript.missing-type-definition"
+    return 0
+  fi
+
+  # [^/C] means that the error is not for a file expected to be within the project
+  # Ex: Error: Cannot find module 'chalk'
+  if grep -q "Error: Cannot find module '[^/C\.]" "$log_file"; then
+    mcount "failures.missing-module.npm"
+    return 0
+  fi
+
+  # / means that the error is for a file expected within the local project
+  # Ex: Error: Cannot find module '/tmp/build_{hash}/...'
+  if grep -q "Error: Cannot find module '/" "$log_file"; then
+    mcount "failures.missing-module.local-absolute"
+    return 0
+  fi
+
+  # /. means that the error is for a file that's a relative require
+  # Ex: Error: Cannot find module './lib/utils'
+  if grep -q "Error: Cannot find module '\." "$log_file"; then
+    mcount "failures.missing-module.local-relative"
+    return 0
+  fi
+
+  # [^/C] means that the error is not for a file expected to be found on a C: drive
+  # Ex: Error: Cannot find module 'C:\Users...'
+  if grep -q "Error: Cannot find module 'C:" "$log_file"; then
+    mcount "failures.missing-module.local-windows"
+    return 0
+  fi
+
+  # matches the subsequent lines of a stacktrace
+  if grep -q 'at [^ ]* \([^ ]*:\d*\d*\)' "$log_file"; then
+    mcount "failures.unknown-stacktrace"
+    return 0
+  fi
+
+  # If we've made it this far it's not an error we've added detection for yet
+  mcount "failures.unknown"
 }
 
 warning() {
