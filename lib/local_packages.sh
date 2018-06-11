@@ -1,34 +1,45 @@
 
 yarn_build_locals() {
   local build_dir=${1:-}
-  cd $build_dir/packages
-  find * -prune -type d | ( while IFS= read -r d; do
-    (
-      cd $d
-      yarn
+  if [ -d "$build_dir/packages" ]; then
 
-      local has_build=$(read_json "./package.json" ".scripts[\"build\"]")
-      if [ -n "$has_build" ]; then
-        yarn run build
-      fi
-    )
-  done )
+    cd $build_dir/packages
+    find * -prune -type d | ( while IFS= read -r d; do
+      (
+        cd $d
+        yarn
 
-  cd ../common
-  yarn && yarn build
+        local has_build=$(read_json "./package.json" ".scripts[\"build\"]")
+        if [ -n "$has_build" ]; then
+          yarn run build
+        fi
+      )
+    done )
+
+  fi
+
+  if [ -d "$build_dir/common" ]; then
+    cd $build_dir/common
+    yarn && yarn build
+  fi
 }
 
 npm_build_locals() {
   local build_dir=${1:-}
-  cd $build_dir/packages
-  find * -prune -type d | ( while IFS= read -r d; do
-    (
-      cd $d
-      npm install
-      npm run build --if-present
-    )
-  done )
 
-  cd ../common
-  npm install && npm run build
+  if [ -d "$build_dir/packages" ]; then
+    cd $build_dir/packages
+    find * -prune -type d | ( while IFS= read -r d; do
+      (
+        cd $d
+        npm install
+        npm run build --if-present
+      )
+    done )
+  fi
+
+  if [ -d "$build_dir/common" ]; then
+    cd $build_dir/common
+    npm install && npm run build
+  fi
 }
