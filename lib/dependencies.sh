@@ -1,5 +1,5 @@
 measure_size() {
-  echo "$((du -s node_modules 2>/dev/null || echo 0) | awk '{print $1}')"
+  (du -s node_modules 2>/dev/null || echo 0) | awk '{print $1}'
 }
 
 list_dependencies() {
@@ -22,11 +22,39 @@ run_if_present() {
   if [ -n "$has_script" ]; then
     if $YARN; then
       echo "Running $script_name (yarn)"
-      yarn run "$script_name"
+      monitor "$script_name" yarn run "$script_name"
     else
       echo "Running $script_name"
-      npm run "$script_name" --if-present
+      monitor "$script_name" npm run "$script_name" --if-present
     fi
+  fi
+}
+
+run_build_script() {
+  local has_build_script=$(read_json "$BUILD_DIR/package.json" ".scripts.build")
+  local has_heroku_build_script=$(read_json "$BUILD_DIR/package.json" ".scripts[\"heroku-postbuild\"]")
+
+  if [[ -n "$has_heroku_build_script" ]] && [[ -n "$has_build_script" ]]; then
+    echo "Detected both 'build' and 'heroku-postbuild' scripts"
+    mcount "scripts.heroku-postbuild-and-build"
+    run_if_present 'heroku-postbuild'
+  elif [[ -n "$has_heroku_build_script" ]]; then
+    mcount "scripts.heroku-postbuild"
+    run_if_present 'heroku-postbuild'
+  elif [[ -n "$has_build_script" ]]; then
+    mcount "scripts.build"
+    run_if_present 'build'
+  fi
+}
+
+warn_build_script_behavior_opt_in() {
+  local opted_in="$1"
+  if [[ "$opted_in" = true ]]; then
+    header "Opting in to new default build script behavior"
+    echo "You have set \"heroku-run-build-script\" = true in your package.json"
+    echo ""
+    echo "- If a \"build\" script is defined in package.json it will be executed by default"
+    echo "- The \"heroku-postbuild\" script will be executed instead if present"
   fi
 }
 
@@ -93,11 +121,11 @@ yarn_node_modules() {
 
   echo "Installing node modules (yarn.lock)"
   cd "$build_dir"
-  yarn install --production=$production --frozen-lockfile --ignore-engines 2>&1
+  monitor "yarn-install" yarn install --production=$production --frozen-lockfile --ignore-engines 2>&1
 }
 
 yarn_prune_devdependencies() {
-  local build_dir=${1:-} 
+  local build_dir=${1:-}
 
   if [ "$NODE_ENV" == "test" ]; then
     echo "Skipping because NODE_ENV is 'test'"
@@ -108,11 +136,9 @@ yarn_prune_devdependencies() {
   elif [ -n "$YARN_PRODUCTION" ]; then
     echo "Skipping because YARN_PRODUCTION is '$YARN_PRODUCTION'"
     return 0
-  else 
-    local start=$(nowms)
-    cd "$build_dir" 
-    yarn install --frozen-lockfile --ignore-engines --ignore-scripts --prefer-offline 2>&1
-    mtime "prune.yarn.time" "${start}"
+  else
+    cd "$build_dir"
+    monitor "yarn-prune" yarn install --frozen-lockfile --ignore-engines --ignore-scripts --prefer-offline 2>&1
   fi
 }
 
@@ -130,7 +156,7 @@ npm_node_modules() {
     else
       echo "Installing node modules (package.json)"
     fi
-    npm install --production=$production --unsafe-perm --userconfig $build_dir/.npmrc 2>&1
+    monitor "npm-install" npm install --production=$production --unsafe-perm --userconfig $build_dir/.npmrc 2>&1
   else
     echo "Skipping (no package.json)"
   fi
@@ -149,14 +175,14 @@ npm_rebuild() {
     else
       echo "Installing any new modules (package.json)"
     fi
-    npm install --production=$production --unsafe-perm --userconfig $build_dir/.npmrc 2>&1
+    monitor "npm-rebuild" npm install --production=$production --unsafe-perm --userconfig $build_dir/.npmrc 2>&1
   else
     echo "Skipping (no package.json)"
   fi
 }
 
 npm_prune_devdependencies() {
-  local build_dir=${1:-} 
+  local build_dir=${1:-}
   local npm_version=$(npm --version)
 
   if [ "$NODE_ENV" == "test" ]; then
@@ -191,9 +217,7 @@ npm_prune_devdependencies() {
     echo "https://devcenter.heroku.com/articles/nodejs-support#specifying-an-npm-version"
     return 0
   else
-    local start=$(nowms)
-    cd "$build_dir" 
-    npm prune --userconfig $build_dir/.npmrc 2>&1
-    mtime "prune.npm.time" "${start}"
+    cd "$build_dir"
+    monitor "npm-prune" npm prune --userconfig $build_dir/.npmrc 2>&1
   fi
 }

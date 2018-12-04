@@ -1,6 +1,87 @@
 # Node.js Buildpack Changelog
 
-## Master
+## master
+
+## v132 (2018-11-12)
+
+- Quietly add new build script behavior behind a flag (#584, #585)
+- Move cache directory layout (#587)
+
+## v131 (2018-10-31)
+
+- Improve bin/detect error messages (#575)
+- Add support for Node 11 (#578, #582, #580)
+- Update default Node version to 10.x
+
+## v130 (2018-10-03)
+
+- Unpin Yarn from 1.9.x (#569)
+
+## v129 (2018-10-02)
+
+- Fix a bug with formatting (#572)
+- internal changes (#567)
+
+## v128 (2018-09-13)
+
+- Default to Yarn 1.9.x to avoid a bug (#568)
+
+## v127 (2018-09-13)
+
+- interal changes (#566)
+
+## v126 (2018-09-06)
+
+- Icrease Node memory default during builds (#561)
+- Rework output when caching directories (#559)
+- Only write export script if directory is writeable (#539)
+- Testing changes (#552, #557, #558)
+- Upgrade the Node Metrics plugin (#564)
+
+## v125 (2018-08-24)
+
+- Fix issue with old Node and metrics plugin (#555)
+
+## v124 (2018-08-23)
+
+- Add plugin for [Node.js Language Metrics](https://devcenter.heroku.com/articles/language-runtime-metrics-nodejs)
+
+## v123 (2018-03-14)
+
+- Internal logging changes
+
+## v122 (2018-03-13)
+
+- Internal logging changes
+
+## v121 (2018-03-02)
+
+- Skip pruning if `NPM_CONFIG_PRODUCTION` or `YARN_PRODUCTION` is defined (#529)
+
+## v120 (2018-03-01)
+
+- Skip pruning for versions of npm with known issues with git submodules (#528)
+- Add timing metrics (#527)
+
+## v119 (2018-02-28)
+
+- Install and prune devDependencies by default (#519)
+
+## v118 (2018-02-02)
+
+- Fix issue with `NODE_ENV` in CI (#513)
+
+## v117 (2018-01-31)
+
+- Fix bug with previous default cache directories fix for npm and yarn (#511)
+
+## v116 (2018-01-29)
+
+- Fix metrics typo (#510)
+
+## v115 (2017-01-25)
+
+- Add metrics to track new types of failure (#509)
 
 ## v121 (2018-03-02)
 
