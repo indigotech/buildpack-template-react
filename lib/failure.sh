@@ -120,9 +120,7 @@ fail_multiple_lockfiles() {
 
 fail_yarn_outdated() {
   local log_file="$1"
-  local build_dir="${2:-}"
-
-  local yarn_engine=$(read_json "$build_dir/package.json" ".engines.yarn")
+  local yarn_engine=$(read_json "$BUILD_DIR/package.json" ".engines.yarn")
 
   if grep -qi 'error .install. has been replaced with .add. to add new dependencies' "$log_file"; then
     mcount "failures.outdated-yarn"
@@ -369,8 +367,21 @@ log_other_failures() {
     return 0
   fi
 
-  if grep -i -e "npm ERR! code E404" -e "error An unexpected error occurred: .* Request failed \"404 Not Found\"" "$log_file"; then
+  if grep -qi -e "npm ERR! code E404" -e "error An unexpected error occurred: .* Request failed \"404 Not Found\"" "$log_file"; then
     mcount "failures.module-404"
+
+    if grep -qi "flatmap-stream" "$log_file"; then
+      mcount "flatmap-stream-404"
+      warn "The flatmap-stream module has been removed from the npm registry
+
+       On November 26th, npm was notified of a malicious package that had made its
+       way into event-stream, a popular npm package. After triaging the malware,
+       npm responded by removing flatmap-stream and event-stream@3.3.6 from the Registry
+       and taking ownership of the event-stream package to prevent further abuse.
+      " https://kb.heroku.com/4OM7X18J/why-am-i-seeing-npm-404-errors-for-event-stream-flatmap-stream-in-my-build-logs
+      exit 1
+    fi
+
     return 0
   fi
 
@@ -454,9 +465,11 @@ log_other_failures() {
 warning() {
   local tip=${1:-}
   local url=${2:-https://devcenter.heroku.com/articles/nodejs-support}
-  echo "- $tip" >> $warnings
-  echo "  $url" >> $warnings
-  echo "" >> $warnings
+  {
+  echo "- $tip"
+  echo "  $url"
+  echo ""
+  } >> $warnings
 }
 
 warn() {

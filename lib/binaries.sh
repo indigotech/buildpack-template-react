@@ -27,8 +27,8 @@ install_yarn() {
 }
 
 install_nodejs() {
-  local version=${1:-8.x}
-  local dir="$2"
+  local version=${1:-10.x}
+  local dir="${2:?}"
 
   echo "Resolving node version $version..."
   if ! read number url < <(curl --silent --get --retry 5 --retry-max-time 15 --data-urlencode "range=$version" "https://nodebin.herokai.com/v1/node/$platform/latest.txt"); then
@@ -41,7 +41,7 @@ install_nodejs() {
     echo "Unable to download node: $code" && false
   fi
   tar xzf /tmp/node.tar.gz -C /tmp
-  rm -rf $dir/*
+  rm -rf "$dir"/*
   mv /tmp/node-v$number-$os-$cpu/* $dir
   chmod +x $dir/bin/*
 }
@@ -79,14 +79,14 @@ install_npm() {
   fi
 
   if [ "$version" == "" ]; then
-    echo "Using default npm version: `npm --version`"
-  elif [[ `npm --version` == "$version" ]]; then
-    echo "npm `npm --version` already installed with node"
+    echo "Using default npm version: $npm_version"
+  elif [[ "$npm_version" == "$version" ]]; then
+    echo "npm $npm_version already installed with node"
   else
-    echo "Bootstrapping npm $version (replacing `npm --version`)..."
+    echo "Bootstrapping npm $version (replacing $npm_version)..."
     if ! npm install --unsafe-perm --quiet -g "npm@$version" 2>@1>/dev/null; then
       echo "Unable to install npm $version; does it exist?" && false
     fi
-    echo "npm `npm --version` installed"
+    echo "npm $version installed"
   fi
 }
